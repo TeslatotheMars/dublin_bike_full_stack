@@ -35,75 +35,12 @@ frontend/
 requirements.txt
 ```
 
-## 1) Set environment variables
+<img width="1882" height="826" alt="image" src="https://github.com/user-attachments/assets/b02018a8-73eb-49d8-bd62-3a2269c41ccf" />
+<img width="1263" height="672" alt="image" src="https://github.com/user-attachments/assets/583e2fff-cb11-4095-b783-951860f36df0" />
+<img width="1260" height="680" alt="image" src="https://github.com/user-attachments/assets/7bae3e34-da15-489d-93c8-50d74b6cc0a9" />
 
-Copy `.env.example` to `.env` and fill your values.
 
-Key variables:
-- MySQL: `MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DB`
-- JCDecaux: `JCDECAUX_API_KEY, JCDECAUX_CONTRACT=dublin`
-- OpenWeather: `OPENWEATHER_API_KEY, OWM_LAT, OWM_LON`
 
-## 2) Install backend dependencies
-
-```bash
-cd backend
-python -m venv .venv
-# Windows: .venv\\Scripts\\activate
-# Mac/Linux: source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-## 3) Run the ingestion + model jobs
-
-You can run them manually first:
-
-```bash
-# from backend/
-python jobs/run_bike_ingest.py
-python jobs/run_weather_ingest.py
-python jobs/run_analytics.py
-```
-
-Scheduling (recommended):
-- `run_bike_ingest.py` every **5 minutes**
-- `run_weather_ingest.py` every **1 hour**
-- `run_analytics.py` every **1 hour** (or 30 minutes)
-
-Use **Windows Task Scheduler** or a cron job.
-
-## 4) Run the Flask API
-
-```bash
-# from backend/
-python -m api.app
-```
-
-Default port: `5000` (set `API_PORT` to change).
-
-## 5) Run the frontend
-
-Option A (recommended): use VSCode Live Server and open `frontend/index.html`.
-
-Option B: serve frontend via Flask (one-command demo)
-
-```bash
-# from backend/
-set FRONTEND_DIR=../frontend   # Windows (PowerShell: $env:FRONTEND_DIR="../frontend")
-python -m api.app
-# then open http://127.0.0.1:5000
-```
-
-If you serve frontend separately, API calls go to the same origin by default.
-If you need a different backend URL, edit `frontend/app.js`:
-
-```js
-const API_BASE = 'http://127.0.0.1:5000';
-```
-
-## Notes
-- DB timestamps are stored/queried in **UTC**. The browser renders them in local time.
-- If `bike_forecast` is empty, run `jobs/run_analytics.py` after you have enough history + weather data.
 
 
 
