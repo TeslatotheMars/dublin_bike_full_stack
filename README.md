@@ -27,12 +27,12 @@ backend/
     run_bike_ingest.py
     run_weather_ingest.py
     run_analytics.py
-  requirements.txt
 frontend/
   index.html
   styles.css
   app.js
 .env.example
+requirements.txt
 ```
 
 ## 1) Set environment variables
@@ -104,5 +104,6 @@ const API_BASE = 'http://127.0.0.1:5000';
 ## Notes
 - DB timestamps are stored/queried in **UTC**. The browser renders them in local time.
 - If `bike_forecast` is empty, run `jobs/run_analytics.py` after you have enough history + weather data.
+
 
 
