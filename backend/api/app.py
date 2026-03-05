@@ -2,31 +2,20 @@ import os
 import json
 import datetime as dt
 from typing import Any, Dict, List, Optional
-
+from api.db import get_db_conn
+from werkzeug.security import generate_password_hash, check_password_hash
 import pymysql
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 app = Flask(__name__)
-CORS(app) 
+CORS(app)
+
 
 def _env_int(name: str, default: int) -> int:
     try:
         return int(os.getenv(name, str(default)))
     except Exception:
         return default
-
-
-def get_db_conn():
-    return pymysql.connect(
-        host=os.getenv("MYSQL_HOST", "127.0.0.1"),
-        user=os.getenv("MYSQL_USER", "root"),
-        password=os.getenv("MYSQL_PASSWORD", ""),
-        port=_env_int("MYSQL_PORT", 3306),
-        database=os.getenv("MYSQL_DB", "bike_db"),
-        charset="utf8mb4",
-        cursorclass=pymysql.cursors.DictCursor,
-        autocommit=True,
-    )
 
 
 def to_iso_z(value: Any) -> Any:
@@ -191,6 +180,48 @@ def create_app() -> Flask:
         finally:
             conn.close()
 
+    @app.route("/api/register", methods=["POST"])
+    def register():
+        data = request.get_json()
+        username = data.get('username')
+        password = data.get('password')
+        if not username or not password:
+            return jsonify({"error": "Username and password are required"}), 400
+
+        hashed_password = generate_password_hash(password)
+        conn = get_db_conn()
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                "INSERT INTO users (username, password_hash) VALUES (%s, %s)",
+                (username, hashed_password)
+            )
+            conn.commit()
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+        finally:
+            cursor.close()
+            conn.close()
+        return jsonify({"message": "User registered successfully"}), 201
+
+    @app.route("/api/login", methods=["POST"])
+    def login():
+        data = request.get_json()
+        username = data.get('username')
+        password = data.get('password')
+
+        conn = get_db_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT password_hash FROM users WHERE username = %s", (username,))
+                user = cur.fetchone()
+                if user and check_password_hash(user['password_hash'], password):
+                    return jsonify({"message": "Login successful"}), 200
+                return jsonify({"error": "Invalid credentials"}), 401
+        finally:
+            conn.close()
+
     # Optional: serve frontend from Flask if you want one-command demo.
     FRONTEND_DIR = os.getenv("FRONTEND_DIR")
 
@@ -198,7 +229,7 @@ def create_app() -> Flask:
     def index():
         if not FRONTEND_DIR:
             return jsonify({
-                "message": "Frontend not served by Flask. Set FRONTEND_DIR env var to serve ./frontend." 
+                "message": "Frontend not served by Flask. Set FRONTEND_DIR env var to serve ./frontend."
             })
         return send_from_directory(FRONTEND_DIR, "index.html")
 
@@ -214,4 +245,5 @@ def create_app() -> Flask:
 if __name__ == "__main__":
     app = create_app()
     port = _env_int("API_PORT", 5000)
-    app.run(host="0.0.0.0", port=port, debug=(os.getenv("FLASK_DEBUG", "0") == "1"))
+    app.run(host="0.0.0.0", port=port, debug=(
+        os.getenv("FLASK_DEBUG", "0") == "1"))
