@@ -36,8 +36,9 @@ requirements.txt
 ```
 
 <img width="1882" height="826" alt="image" src="https://github.com/user-attachments/assets/b02018a8-73eb-49d8-bd62-3a2269c41ccf" />
-<img width="1263" height="672" alt="image" src="https://github.com/user-attachments/assets/583e2fff-cb11-4095-b783-951860f36df0" />
-<img width="1260" height="680" alt="image" src="https://github.com/user-attachments/assets/7bae3e34-da15-489d-93c8-50d74b6cc0a9" />
+<img width="1251" height="662" alt="image" src="https://github.com/user-attachments/assets/a6ed1cec-fe5b-4522-b9ec-fca54e346810" />
+
+
 
 
 
