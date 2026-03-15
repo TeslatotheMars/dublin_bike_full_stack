@@ -210,7 +210,7 @@ async function refreshBikes() {
     if (!markersById.has(s.station_id)) {
       const marker = L.circleMarker([s.latitude, s.longitude], markerStyle(cls));
       marker.addTo(map);
-      marker.on('click', () => showStationForecast(s));
+      marker.on('click', () => handleMarkerClick(s));
       markersById.set(s.station_id, { marker, station: s, cls });
     } else {
       const entry = markersById.get(s.station_id);
@@ -273,3 +273,66 @@ async function boot() {
 }
 
 boot().catch(console.error);
+
+
+// ---------- K-06: Journey Planner Logic ----------
+let startPoint = null;
+let endPoint = null;
+let routingControl = null;
+
+const startInput = document.getElementById('startStation');
+const endInput = document.getElementById('endStation');
+
+
+function handleMarkerClick(station) {
+    showStationForecast(station);
+    if (!startPoint) {
+        startPoint = { lat: station.latitude, lng: station.longitude, name: station.name };
+        startInput.value = `From: ${station.name}`;
+    } else if (!endPoint) {
+        endPoint = { lat: station.latitude, lng: station.longitude, name: station.name };
+        endInput.value = `To: ${station.name}`;
+    } else {
+        
+        startPoint = { lat: station.latitude, lng: station.longitude, name: station.name };
+        endPoint = null;
+        startInput.value = `From: ${station.name}`;
+        endInput.value = "";
+    }
+}
+
+
+function calculateRoute() {
+    if (!startPoint || !endPoint) {
+        alert("Please click two stations on the map first!");
+        return;
+    }
+
+    if (routingControl) map.removeControl(routingControl);
+
+    routingControl = L.Routing.control({
+        waypoints: [
+            L.latLng(startPoint.lat, startPoint.lng),
+            L.latLng(endPoint.lat, endPoint.lng)
+        ],
+        routeWhileDragging: false,
+        addWaypoints: false,
+        showAlternatives: true,
+        altLineOptions: { styles: [{ color: 'black', opacity: 0.15, weight: 9 }] }
+    }).addTo(map);
+
+    document.getElementById('status').innerText = 'Route Found';
+}
+
+
+function clearRoute() {
+    if (routingControl) map.removeControl(routingControl);
+    startPoint = null;
+    endPoint = null;
+    startInput.value = "";
+    endInput.value = "";
+    document.getElementById('routeInstructions').innerHTML = "";
+}
+
+document.getElementById('btnPlan').addEventListener('click', calculateRoute);
+document.getElementById('btnClearRoute').addEventListener('click', clearRoute);

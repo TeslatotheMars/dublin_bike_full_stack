@@ -7,6 +7,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import pymysql
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
+from api.auth import auth_bp
 app = Flask(__name__)
 CORS(app)
 
@@ -38,6 +39,7 @@ def jsonify_rows(rows: List[Dict[str, Any]]):
 
 def create_app() -> Flask:
     app = Flask(__name__, static_folder=None)
+    app.register_blueprint(auth_bp, url_prefix="/api/auth")
     CORS(app)
 
     @app.get("/api/health")
@@ -179,30 +181,6 @@ def create_app() -> Flask:
             return jsonify_rows(rows)
         finally:
             conn.close()
-
-    @app.route("/api/register", methods=["POST"])
-    def register():
-        data = request.get_json()
-        username = data.get('username')
-        password = data.get('password')
-        if not username or not password:
-            return jsonify({"error": "Username and password are required"}), 400
-
-        hashed_password = generate_password_hash(password)
-        conn = get_db_conn()
-        cursor = conn.cursor()
-        try:
-            cursor.execute(
-                "INSERT INTO users (username, password_hash) VALUES (%s, %s)",
-                (username, hashed_password)
-            )
-            conn.commit()
-        except Exception as e:
-            return jsonify({"error": str(e)}), 500
-        finally:
-            cursor.close()
-            conn.close()
-        return jsonify({"message": "User registered successfully"}), 201
 
     @app.route("/api/login", methods=["POST"])
     def login():

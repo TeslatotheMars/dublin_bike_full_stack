@@ -6,8 +6,8 @@ from api.db import get_db_conn
 auth_bp = Blueprint("auth", __name__)
 
 
-@auth_bp.route("/api/register", methods=["POST"])
-def register():
+@auth_bp.route("/signup", methods=["POST"])
+def signup():
     data = request.get_json()
     username = data.get('username')
     password = data.get('password')
@@ -19,7 +19,7 @@ def register():
     cursor = conn.cursor()
     try:
         cursor.execute(
-            "INSERT INTO users (username, password) VALUES (%s, %s)", (username, hashed_password))
+            "INSERT INTO users (username, password_hash) VALUES (%s, %s)", (username, hashed_password))
         conn.commit()
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -28,14 +28,14 @@ def register():
     return jsonify({"message": "User registered successfully"}), 201
 
 
-@auth_bp.route("/api/login", methods=["POST"])
+@auth_bp.route("/login", methods=["POST"])
 def login():
     data = request.get_json()
     username = data.get('username')
     password = data.get('password')
 
     if not username or not password:
-        return jsonify({"error": "用户名和密码不能为空"}), 400
+        return jsonify({"error": "Username and password are required"}), 400
 
     conn = get_db_conn()
     cursor = conn.cursor()
@@ -49,4 +49,4 @@ def login():
         access_token = create_access_token(identity=username)
         return jsonify(access_token=access_token), 200
 
-    return jsonify({"error": "用户名或密码错误"}), 401
+    return jsonify({"error": "Invalid username or password"}), 401
