@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cityflow — Smarter cycling for Dublin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.css" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- ═══════ SCREEN 1: HOMEPAGE ═══════ -->
+  <div id="screen-home" class="screen active">
+    <div class="hero-bg">
+      <div class="hero-overlay"></div>
+      <div class="hero-content">
+        <div class="cf-logo">
+          <div class="cf-logo-icon">
+            <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
+              <circle cx="13" cy="13" r="10" stroke="white" stroke-width="2"/>
+              <path d="M13 7v6l4 4" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <span class="cf-logo-text">Cityflow</span>
+        </div>
+        <p class="hero-tagline">Smarter bike sharing for Dublin. Pick up, ride, and<br>drop off — effortlessly.</p>
+        <div class="hero-actions">
+          <button class="btn-hero-primary" id="homeSignupBtn">Sign Up Free</button>
+          <button class="btn-hero-secondary" id="homeLoginBtn">Log In</button>
+        </div>
+      </div>
+    </div>
+    <div class="why-section">
+      <h2 class="why-title">Why Cityflow?</h2>
+      <div class="why-grid">
+        <div class="why-card"><div class="why-icon">🗺️</div><h3>Live Map</h3><p>See every Dublin Bike station in real-time. Green, amber, red availability at a glance.</p></div>
+        <div class="why-card"><div class="why-icon">🔮</div><h3>AI Forecast</h3><p>24-hour predictions powered by machine learning — never arrive at an empty station again.</p></div>
+        <div class="why-card"><div class="why-icon">☁️</div><h3>Weather Intel</h3><p>72-hour weather forecasts built into your journey planning experience.</p></div>
+        <div class="why-card"><div class="why-icon">🧭</div><h3>Journey Planner</h3><p>Click two stations and get turn-by-turn cycling directions instantly.</p></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ SCREEN 2: LOGIN / REGISTER ═══════ -->
+  <div id="screen-auth" class="screen">
+    <div class="auth-page">
+      <div class="auth-logo" id="authLogoBack" style="cursor:pointer">
+        <div class="cf-logo-icon cf-logo-icon--sm">
+          <svg width="20" height="20" viewBox="0 0 26 26" fill="none">
+            <circle cx="13" cy="13" r="10" stroke="white" stroke-width="2"/>
+            <path d="M13 7v6l4 4" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <span class="cf-logo-text">Cityflow</span>
+      </div>
+      <p class="auth-page-sub">Smarter cycling for Dublin</p>
+      <div class="auth-card">
+        <div class="auth-tabs">
+          <button class="auth-tab active" id="tabLogin" onclick="switchTab('login')">Login</button>
+          <button class="auth-tab" id="tabRegister" onclick="switchTab('register')">Register</button>
+        </div>
+        <div class="auth-alert auth-alert--err" id="authError" style="display:none"></div>
+        <div class="auth-alert auth-alert--ok"  id="authSuccess" style="display:none"></div>
+        <div id="panel-login">
+          <div class="form-group">
+            <label class="form-label">Email</label>
+            <div class="input-wrap">
+              <span class="input-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 7 10 7 10-7"/></svg></span>
+              <input class="form-input" type="text" id="loginUsername" placeholder="you@example.com" autocomplete="username" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Password</label>
+            <div class="input-wrap">
+              <span class="input-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+              <input class="form-input form-input--padded-right" type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password" />
+              <button class="input-eye" onclick="togglePw('loginPassword', this)" type="button"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+            </div>
+          </div>
+          <label class="remember-row">
+            <input type="checkbox" id="rememberMe" class="remember-check" />
+            <span>Remember me</span>
+          </label>
+          <button class="btn-submit" id="loginSubmitBtn">Sign In</button>
+        </div>
+        <div id="panel-register" style="display:none">
+          <div class="form-group">
+            <label class="form-label">Username</label>
+            <div class="input-wrap">
+              <span class="input-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>
+              <input class="form-input" type="text" id="registerUsername" placeholder="Choose a username" autocomplete="username" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Password</label>
+            <div class="input-wrap">
+              <span class="input-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+              <input class="form-input form-input--padded-right" type="password" id="registerPassword" placeholder="Create a password" autocomplete="new-password" />
+              <button class="input-eye" onclick="togglePw('registerPassword', this)" type="button"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Confirm Password</label>
+            <div class="input-wrap">
+              <span class="input-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+              <input class="form-input" type="password" id="registerConfirm" placeholder="Repeat password" />
+            </div>
+          </div>
+          <button class="btn-submit" id="registerSubmitBtn">Create Account</button>
+        </div>
+      </div>
+      <p class="auth-skip"><a href="#" id="skipToMap">Continue without account →</a></p>
+    </div>
+  </div>
+
+  <!-- ═══════ SCREEN 3: MAP DASHBOARD ═══════ -->
+  <div id="screen-map" class="screen">
+    <header class="dash-nav">
+      <button class="dash-brand" id="mapBackHome">
+        <div class="cf-logo-icon cf-logo-icon--xs">
+          <svg width="14" height="14" viewBox="0 0 26 26" fill="none">
+            <circle cx="13" cy="13" r="10" stroke="white" stroke-width="2"/>
+            <path d="M13 7v6l4 4" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        Cityflow
+      </button>
+      <div class="dash-center">
+        <div class="status-pill">
+          <span class="status-dot"></span>
+          <span id="status">Connecting…</span>
+        </div>
+      </div>
+      <div class="dash-right">
+        <div class="wx-chip" id="weatherCard" role="button" tabindex="0">
+          <span id="wIcon" style="font-size:14px">🌤️</span>
+          <span id="wTemp">—</span>
+          <span class="wx-dot">·</span>
+          <span id="weatherMain" class="wx-sub">—</span>
+        </div>
+        <button class="nav-btn-outline" id="mapLoginBtn">Log in</button>
+        <button class="nav-btn-green" id="mapRegisterBtn">Sign up</button>
+
+        <!-- ── PROFILE AVATAR ── -->
+        <div id="profileWrapper" style="display:none">
+          <div id="profileAvatar" onclick="toggleProfileModal()" style="
+            width:38px;height:38px;border-radius:50%;
+            background:#3dad77;color:white;
+            font-size:14px;font-weight:700;
+            display:flex;align-items:center;justify-content:center;
+            cursor:pointer;border:2.5px solid white;
+            box-shadow:0 0 0 2px #3dad77;user-select:none;
+            transition:box-shadow .15s;">?</div>
+        </div>
+        <!-- ── END PROFILE AVATAR ── -->
+
+      </div>
+    </header>
+
+    <div class="rain-banner" id="rainBanner" style="display:none">
+      🌧 Rain expected — check the 72h forecast before you ride
+    </div>
+
+    <div class="dash-body">
+      <section class="map-wrap">
+        <div id="map"></div>
+        <div class="map-hint" id="mapHint">Click a station to see 24h forecast</div>
+      </section>
+
+      <aside class="sidebar">
+
+        <div class="scard">
+          <div class="scard-head">
+            <span class="scard-title">Journey Planner</span>
+            <span class="scard-badge">🧭</span>
+          </div>
+          <div class="planner">
+            <div class="stop-row">
+              <div class="stop-pin stop-pin--a">A</div>
+              <input class="stop-input" id="startStation" type="text" placeholder="Click a station to set start" readonly />
+            </div>
+            <div class="stop-connector"></div>
+            <div class="stop-row">
+              <div class="stop-pin stop-pin--b">B</div>
+              <input class="stop-input" id="endStation" type="text" placeholder="Click a station to set end" readonly />
+            </div>
+          </div>
+          <div class="planner-btns">
+            <button class="btn-green-sm" id="btnPlan">Find Route</button>
+            <button class="btn-ghost-sm" id="btnClearRoute">Clear</button>
+          </div>
+          <div id="routeInstructions" class="route-note"></div>
+        </div>
+
+        <div class="scard scard--hover" id="weatherCardSide">
+          <div class="scard-head">
+            <span class="scard-title">Weather · Dublin</span>
+            <span class="live-badge">LIVE</span>
+          </div>
+          <div class="wx-row">
+            <span id="wEmoji" style="font-size:32px">🌤️</span>
+            <div>
+              <div class="wx-temp" id="wTempBig">—</div>
+              <div class="wx-desc" id="wMainBig">—</div>
+            </div>
+          </div>
+          <div class="wx-details">
+            <div class="wx-detail-row"><span>Wind</span><span id="wWind">—</span></div>
+            <div class="wx-detail-row"><span>Humidity</span><span id="wHum">—</span></div>
+            <div class="wx-detail-row"><span>Updated</span><span id="wTime">—</span></div>
+          </div>
+          <button class="btn-ghost-full" id="showWeatherForecastBtn">View 72h forecast →</button>
+        </div>
+
+        <div class="scard">
+          <div class="scard-head"><span class="scard-title">Station availability</span></div>
+          <div class="legend">
+            <div class="leg-row"><span class="leg-dot" style="background:#3dad77"></span>Good (≥50%)</div>
+            <div class="leg-row"><span class="leg-dot" style="background:#f59e0b"></span>Medium (20–50%)</div>
+            <div class="leg-row"><span class="leg-dot" style="background:#ef4444"></span>Low (&lt;20%)</div>
+            <div class="leg-row"><span class="leg-dot" style="background:#9ca3af"></span>Offline / Closed</div>
+          </div>
+        </div>
+
+        <div class="scard chatbot-card">
+          <div class="scard-head">
+            <span class="scard-title">💬 Cityflow Assistant</span>
+            <span class="live-badge">HELP</span>
+          </div>
+          <div class="chatbot-msgs" id="chatMsgs"></div>
+        </div>
+
+      </aside>
+    </div>
+  </div>
+
+  <!-- ═══════ MODALS ═══════ -->
+  <div class="modal" id="stationModal" aria-hidden="true">
+    <div class="modal-card">
+      <div class="modal-hd">
+        <div>
+          <div class="modal-title" id="stationTitle">Station Forecast</div>
+          <div class="modal-sub" id="stationSub">—</div>
+        </div>
+        <button class="modal-close" id="closeStation">✕</button>
+      </div>
+      <canvas id="stationChart" height="160"></canvas>
+    </div>
+    <div class="modal-back" data-close="station"></div>
+  </div>
+
+  <div class="modal" id="weatherModal" aria-hidden="true">
+    <div class="modal-card modal-card--wide">
+      <div class="modal-hd">
+        <div>
+          <div class="modal-title">72h Weather Forecast · Dublin</div>
+          <div class="modal-sub" id="weatherSub">—</div>
+        </div>
+        <button class="modal-close" id="closeWeather">✕</button>
+      </div>
+      <canvas id="weatherChart" height="160"></canvas>
+    </div>
+    <div class="modal-back" data-close="weather"></div>
+  </div>
+
+  <!-- ═══════ PROFILE MODAL ═══════ -->
+  <div id="profileModal" style="
+    display:none; position:fixed; inset:0; z-index:1000;
+    background:rgba(0,0,0,.5); backdrop-filter:blur(6px);
+    align-items:center; justify-content:center;">
+    <div style="
+      background:white; border-radius:24px;
+      width:min(460px,92vw);
+      box-shadow:0 24px 64px rgba(0,0,0,.2);
+      overflow:hidden; animation:popIn .2s ease;">
+
+      <!-- Green hero header -->
+      <div style="background:linear-gradient(135deg,#3dad77 0%,#2d8a5f 100%);padding:32px 28px 28px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px">
+          <div style="font-size:12px;font-weight:600;color:rgba(255,255,255,0.7);letter-spacing:.5px">MY ACCOUNT</div>
+          <button onclick="toggleProfileModal()" style="
+            background:rgba(255,255,255,0.2);border:none;
+            width:30px;height:30px;border-radius:50%;
+            color:white;font-size:16px;cursor:pointer;
+            display:flex;align-items:center;justify-content:center;">✕</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:16px">
+          <div id="profileAvatarLarge" style="
+            width:64px;height:64px;border-radius:50%;
+            background:rgba(255,255,255,0.25);
+            display:flex;align-items:center;justify-content:center;
+            font-size:24px;font-weight:800;color:white;
+            border:3px solid rgba(255,255,255,0.5);
+            flex-shrink:0;">?</div>
+          <div>
+            <div id="profileName" style="font-size:22px;font-weight:800;color:white;font-family:'Plus Jakarta Sans',sans-serif">—</div>
+            <div id="profileSince" style="font-size:13px;color:rgba(255,255,255,0.8);margin-top:4px">—</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Body -->
+      <div style="padding:24px 28px">
+
+        <!-- Account details card -->
+        <div style="background:#f9fafb;border-radius:14px;padding:18px;margin-bottom:16px">
+          <div style="font-size:11px;font-weight:700;color:var(--text-muted);letter-spacing:.6px;margin-bottom:14px">ACCOUNT DETAILS</div>
+          <div style="margin-bottom:14px">
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">Email</div>
+            <div id="profileEmail" style="font-size:15px;font-weight:600;color:var(--text);word-break:break-all">—</div>
+          </div>
+          <div style="border-top:1px solid var(--border);padding-top:14px">
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">Username</div>
+            <div id="profileUsername" style="font-size:15px;font-weight:600;color:var(--text)">—</div>
+          </div>
+        </div>
+
+        <!-- Balance card -->
+        <div style="background:#f0faf5;border-radius:14px;padding:18px;border:1px solid #c6eedd;margin-bottom:20px">
+          <div style="font-size:11px;font-weight:700;color:#2d8a5f;letter-spacing:.6px;margin-bottom:10px">ACCOUNT BALANCE</div>
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <div>
+              <div id="profileBalance" style="font-size:36px;font-weight:800;color:#3dad77;font-family:'Plus Jakarta Sans',sans-serif;line-height:1">€0.00</div>
+              <div style="font-size:13px;color:#2d8a5f;margin-top:6px">Available credit</div>
+            </div>
+            <button class="btn-green-sm" style="flex:none;width:auto;padding:10px 22px;font-size:14px">Top up</button>
+          </div>
+        </div>
+
+        <!-- Sign out -->
+        <button onclick="signOut()" style="
+          width:100%;background:transparent;
+          border:1.5px solid #fecaca;border-radius:12px;
+          padding:13px;font-size:15px;color:#ef4444;
+          cursor:pointer;font-weight:600;
+          transition:background .15s;"
+          onmouseover="this.style.background='#fef2f2'"
+          onmouseout="this.style.background='transparent'">
+          Sign out
+        </button>
+
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
