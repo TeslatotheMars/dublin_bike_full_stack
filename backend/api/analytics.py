@@ -1,6 +1,7 @@
 # analytics.py
 import os
 import math
+import logging
 import datetime as dt
 from typing import Optional, Tuple, Dict, Any, List
 
@@ -10,6 +11,9 @@ import pandas as pd
 # pip install scikit-learn joblib pandas pymysql
 from sklearn.linear_model import Ridge
 import joblib
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 
 class AnalyticsRepository:
@@ -47,6 +51,13 @@ class AnalyticsRepository:
         mysql_port: int = 3306,
         db_name: str = "bike_db",
     ):
+        # Store connection parameters for later use (data availability checks, etc.)
+        self._host = mysql_host
+        self._user = mysql_user
+        self._password = mysql_password
+        self._port = int(mysql_port)
+        self._db_name = db_name
+        
         self._conn = pymysql.connect(
             host=mysql_host,
             user=mysql_user,
@@ -140,12 +151,13 @@ class AnalyticsRepository:
     # ----------------------------
     # 2) Dataset builder (hourly) for training
     # ----------------------------
-    def fetch_hourly_dataset(self, lookback_days: int = 7) -> pd.DataFrame:
+    def _fetch_real_hourly_dataset(self, lookback_days: int = 7) -> pd.DataFrame:
         """
-        Returns hourly dataset with:
+        Returns hourly dataset from database with:
           station_id, hour_ts, y_available_bikes, wind_speed, temperature, weather_main
 
         Implementation avoids CTE for broad MySQL compatibility.
+        This is the real data only - use fetch_hourly_dataset() for automatic fallback to demo data.
         """
         sql = """
         SELECT
@@ -195,6 +207,91 @@ class AnalyticsRepository:
         df = df.dropna(subset=["lag_1h"])
         return df
 
+    def fetch_hourly_dataset(self, lookback_days: int = 7, use_demo_fallback: bool = True) -> pd.DataFrame:
+        """
+        Returns hourly dataset for training. Falls back to demo data if real data is insufficient.
+        
+        Args:
+            lookback_days: Number of days of historical data to use
+            use_demo_fallback: If True, use demo data when real data insufficient. If False, raise error.
+        
+        Returns:
+            pd.DataFrame with training data (real or demo)
+        """
+        if not use_demo_fallback:
+            # Direct mode: only real data or fail
+            return self._fetch_real_hourly_dataset(lookback_days)
+        
+        # Try to fetch real data first
+        try:
+            from data.data_check import check_data_availability
+            
+            has_data, reason = check_data_availability(
+                mysql_host=self._host,
+                mysql_user=self._user,
+                mysql_password=self._password,
+                mysql_port=self._port,
+                db_name=self._db_name,
+                min_lookback_days=lookback_days
+            )
+            
+            if has_data:
+                logger.info(f"✅ Real data check passed: {reason}")
+                df = self._fetch_real_hourly_dataset(lookback_days)
+                if not df.empty:
+                    logger.info(f"Loaded {len(df)} rows from real database")
+                    return df
+                else:
+                    logger.warning("Real data query returned empty DataFrame")
+            else:
+                logger.warning(f"⚠️ Insufficient real data - {reason}")
+        
+        except ImportError as e:
+            logger.warning(f"Could not import data_check module: {e}. Attempting real data anyway.")
+            df = self._fetch_real_hourly_dataset(lookback_days)
+            if not df.empty:
+                return df
+        except Exception as e:
+            logger.warning(f"Error checking data availability: {e}. Using demo data fallback.")
+        
+        # Fallback to demo data
+        try:
+            from data.demo_data import generate_demo_hourly_dataset
+            logger.warning(f"⚠️ Falling back to DEMO DATA (lookback_days={lookback_days})")
+            df = generate_demo_hourly_dataset(lookback_days)
+            if not df.empty:
+                logger.info(f"Generated {len(df)} rows of DEMO data for training")
+                return df
+        except ImportError as e:
+            logger.error(f"Failed to import demo_data module: {e}")
+            raise RuntimeError("No real data available and cannot load demo data module")
+        except Exception as e:
+            logger.error(f"Error generating demo data: {e}")
+            raise RuntimeError(f"Failed to generate demo data: {e}")
+        
+        raise RuntimeError("Unable to load any training data (real or demo)")
+
+    def _get_station_ids(self) -> List[int]:
+        """
+        Get list of all station IDs from the database.
+        Tries bike_current first, then falls back to bike_history.
+        """
+        try:
+            rows = self._fetchall("SELECT DISTINCT station_id FROM bike_current ORDER BY station_id;")
+            if rows:
+                return [int(r["station_id"]) for r in rows]
+        except Exception:
+            pass
+        
+        # Fallback to bike_history
+        try:
+            rows = self._fetchall("SELECT DISTINCT station_id FROM bike_history ORDER BY station_id;")
+            if rows:
+                return [int(r["station_id"]) for r in rows]
+        except Exception as e:
+            logger.error(f"Failed to get station IDs: {e}")
+            return []
+
     def _feature_engineer(
         self,
         df: pd.DataFrame,
@@ -222,17 +319,14 @@ class AnalyticsRepository:
         work["wind_speed"] = work["wind_speed"].astype(float)
         work["temp"] = work["temperature"].astype(float)
         work["temp2"] = work["temp"] ** 2
-        work["rain"] = (work["weather_main"].astype(
-            str).str.lower() == "rain").astype(int)
+        work["rain"] = (work["weather_main"].astype(str).str.lower() == "rain").astype(int)
 
         # time
         work["hour"] = work["hour_ts"].dt.hour
         work["weekday"] = work["hour_ts"].dt.dayofweek  # Monday=0..Sunday=6
 
-        work["sin_hour"] = work["hour"].apply(
-            lambda h: math.sin(2.0 * math.pi * h / 24.0))
-        work["cos_hour"] = work["hour"].apply(
-            lambda h: math.cos(2.0 * math.pi * h / 24.0))
+        work["sin_hour"] = work["hour"].apply(lambda h: math.sin(2.0 * math.pi * h / 24.0))
+        work["cos_hour"] = work["hour"].apply(lambda h: math.cos(2.0 * math.pi * h / 24.0))
 
         # weekday dummies: ensure wd_0..wd_6 exist, then drop wd_0 (Monday baseline)
         wd = pd.get_dummies(work["weekday"], prefix="wd", dtype=int)
@@ -243,8 +337,7 @@ class AnalyticsRepository:
         wd = wd[[f"wd_{k}" for k in range(7)]].drop(columns=["wd_0"])
 
         X_parts = [
-            work[["lag_1h", "wind_speed", "temp", "temp2", "rain",
-                  "sin_hour", "cos_hour"]].reset_index(drop=True),
+            work[["lag_1h", "wind_speed", "temp", "temp2", "rain", "sin_hour", "cos_hour"]].reset_index(drop=True),
             wd.reset_index(drop=True),
         ]
 
@@ -264,16 +357,16 @@ class AnalyticsRepository:
         model_path: str = "bike_availability_model.joblib",
         include_station_fe: bool = True,
         alpha: float = 1.0,
+        use_demo_fallback: bool = True,
     ) -> Dict[str, Any]:
-        df = self.fetch_hourly_dataset(lookback_days=lookback_days)
+        df = self.fetch_hourly_dataset(lookback_days=lookback_days, use_demo_fallback=use_demo_fallback)
         if df.empty:
             raise RuntimeError(
                 "No training data available. "
                 "Check bike_history/weather_history and lookback_days."
             )
 
-        X, y = self._feature_engineer(
-            df, include_station_fe=include_station_fe)
+        X, y = self._feature_engineer(df, include_station_fe=include_station_fe)
 
         model = Ridge(alpha=float(alpha), random_state=42)
         model.fit(X, y)
@@ -288,6 +381,7 @@ class AnalyticsRepository:
             "n_rows": int(len(df)),
         }
         joblib.dump(bundle, model_path)
+        logger.info(f"✅ Model trained on {len(df)} rows and saved to {model_path}")
         return bundle
 
     # ----------------------------
@@ -308,21 +402,6 @@ class AnalyticsRepository:
         self._execute(sql)
         self._conn.commit()
 
-    def _get_station_ids(self) -> List[int]:
-        """
-        Get all station IDs from bike_current (preferred) or bike_history.
-        """
-        try:
-            rows = self._fetchall(
-                "SELECT station_id FROM bike_current ORDER BY station_id;")
-            if rows:
-                return [int(r["station_id"]) for r in rows]
-        except Exception:
-            pass
-        rows = self._fetchall(
-            "SELECT DISTINCT station_id FROM bike_history ORDER BY station_id;")
-        return [int(r["station_id"]) for r in rows]
-
     def _get_latest_available_bikes(self) -> Dict[int, float]:
         """
         Get the latest available bikes for each station from bike_current or bike_history.
@@ -330,8 +409,7 @@ class AnalyticsRepository:
         """
         # Try bike_current first
         try:
-            rows = self._fetchall(
-                "SELECT station_id, available_bikes FROM bike_current;")
+            rows = self._fetchall("SELECT station_id, available_bikes FROM bike_current;")
             if rows:
                 return {int(r["station_id"]): float(r["available_bikes"]) for r in rows}
         except Exception:
@@ -409,7 +487,7 @@ class AnalyticsRepository:
         include_station_fe = bool(bundle.get("include_station_fe", True))
 
         if start_time_utc is None:
-            start_time_utc = dt.datetime.utcnow().replace(minute=0, second=0, microsecond=0)
+            start_time_utc = dt.datetime.utcnow().replace(second=0, microsecond=0)
         end_time_utc = start_time_utc + dt.timedelta(hours=int(next_hours))
 
         # Build hourly timestamps for prediction
@@ -423,17 +501,14 @@ class AnalyticsRepository:
             return 0
 
         # Load hourly forecast weather
-        weather_h = self.fetch_forecast_weather_hourly(
-            start_time_utc, end_time_utc)
+        weather_h = self.fetch_forecast_weather_hourly(start_time_utc, end_time_utc)
         if weather_h.empty:
-            raise RuntimeError(
-                "weather_forecast has no rows for the requested forecast window.")
+            raise RuntimeError("weather_forecast has no rows for the requested forecast window.")
 
         # Stations
         station_ids = self._get_station_ids()
         if not station_ids:
-            raise RuntimeError(
-                "No stations found (stations empty and bike_history empty).")
+            raise RuntimeError("No stations found (stations empty and bike_history empty).")
 
         # Get latest available bikes for initial lag
         latest_bikes = self._get_latest_available_bikes()
@@ -441,8 +516,7 @@ class AnalyticsRepository:
         # Predict hour by hour
         predictions = []
         for station_id in station_ids:
-            lag_value = latest_bikes.get(
-                station_id, 0.0)  # default to 0 if no data
+            lag_value = latest_bikes.get(station_id, 0.0)  # default to 0 if no data
 
             for hour_ts in hours:
                 # Get weather for this hour
@@ -463,30 +537,23 @@ class AnalyticsRepository:
                 temp2 = temp ** 2
                 rain = 1 if weather_main.lower() == "rain" else 0
 
-                # Build feature dictionary safely
-                feature_dict = {
-                    "lag_1h": lag_value,
-                    "wind_speed": wind_speed,
-                    "temp": temp,
-                    "temp2": temp2,
-                    "rain": rain,
-                    "sin_hour": sin_hour,
-                    "cos_hour": cos_hour
-                }
-
                 # weekday dummies
-                for k in range(1, 7):
-                    feature_dict[f"wd_{k}"] = 1 if weekday == k else 0
+                wd_dummies = [0] * 6  # wd_1 to wd_6
+                if weekday > 0:  # not Monday
+                    wd_dummies[weekday - 1] = 1
 
-                # station dummies (only those known to the model)
+                # station dummies
+                st_dummies = []
                 if include_station_fe:
-                    for col in feature_columns:
-                        if col.startswith("st_"):
-                            feature_dict[col] = 1 if col == f"st_{station_id}" else 0
+                    for sid in station_ids:
+                        st_dummies.append(1 if sid == station_id else 0)
+
+                # Build feature vector
+                features = [lag_value, wind_speed, temp, temp2, rain, sin_hour, cos_hour] + wd_dummies + st_dummies
+                feature_dict = dict(zip(feature_columns, features))
 
                 # Create DataFrame for prediction
-                X_pred = pd.DataFrame([{c: feature_dict.get(c, 0) for c in feature_columns}])[
-                    feature_columns]
+                X_pred = pd.DataFrame([feature_dict])
 
                 # Predict
                 pred = float(model.predict(X_pred)[0])
@@ -507,8 +574,7 @@ class AnalyticsRepository:
             return 0
 
         pred_df = pd.DataFrame(predictions)
-        pred_df["forecast_time"] = pd.to_datetime(
-            pred_df["forecast_time"], utc=True)
+        pred_df["forecast_time"] = pd.to_datetime(pred_df["forecast_time"], utc=True)
 
         # Build target timestamps
         times = pd.date_range(
@@ -526,8 +592,7 @@ class AnalyticsRepository:
                 continue
 
             station_preds = station_preds.set_index("forecast_time")
-            station_preds = station_preds.reindex(
-                times, method="ffill")  # forward fill hourly predictions
+            station_preds = station_preds.reindex(times, method="ffill")  # forward fill hourly predictions
 
             for ts, row in station_preds.iterrows():
                 out_rows.append({
@@ -545,8 +610,7 @@ class AnalyticsRepository:
 
         try:
             with self._conn.cursor() as cur:
-                cur.executemany(insert_sql, [
-                                (r["station_id"], r["forecast_time"], r["available_bike"]) for r in out_rows])
+                cur.executemany(insert_sql, [(r["station_id"], r["forecast_time"], r["available_bike"]) for r in out_rows])
             self._conn.commit()
         except Exception:
             self._conn.rollback()
@@ -556,6 +620,12 @@ class AnalyticsRepository:
 
 
 if __name__ == "__main__":
+    # Configure logging for direct execution
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    
     repo = AnalyticsRepository(
         mysql_host=os.getenv("MYSQL_HOST", "127.0.0.1"),
         mysql_user=os.getenv("MYSQL_USER", "root"),
@@ -568,22 +638,23 @@ if __name__ == "__main__":
         # 1) stats
         stats_days = int(os.getenv("STATS_LOOKBACK_DAYS", "7"))
         repo.refresh_stats(lookback_days=stats_days)
-        print(f"stats table refreshed (lookback_days={stats_days}).")
+        logger.info(f"✅ Stats table refreshed (lookback_days={stats_days})")
 
-        # 2) train model (all data)
+        # 2) train model (all data) with demo fallback
         ml_days = int(os.getenv("ML_LOOKBACK_DAYS", "7"))
         include_fe = (os.getenv("INCLUDE_STATION_FE", "1") == "1")
         model_path = os.getenv("MODEL_PATH", "bike_availability_model.joblib")
         alpha = float(os.getenv("RIDGE_ALPHA", "1.0"))
+        use_demo = (os.getenv("USE_DEMO_FALLBACK", "1") == "1")
 
         bundle = repo.train_and_save_model_all_data(
             lookback_days=ml_days,
             model_path=model_path,
             include_station_fe=include_fe,
             alpha=alpha,
+            use_demo_fallback=use_demo,
         )
-        print(
-            f"model trained on ALL data and saved to {model_path}. rows used={bundle['n_rows']}")
+        logger.info(f"✅ Model trained and saved to {model_path} ({bundle['n_rows']} rows, {bundle['trained_at_utc']})")
 
         # 3) forecast next 24 hours every 5 minutes and store
         forecast_hours = int(os.getenv("FORECAST_HOURS", "24"))
@@ -594,11 +665,14 @@ if __name__ == "__main__":
             next_hours=forecast_hours,
             step_minutes=forecast_step,
         )
-        print(
-            f"bike_forecast updated: {written} rows. (next_hours={forecast_hours}, step={forecast_step}min)")
-        print("PYTHON DB:", repo._fetchall(
-            "SELECT DATABASE() AS db, @@port AS port, @@hostname AS host;")[0])
-        print("PYTHON bike_forecast count:", repo._fetchall(
-            "SELECT COUNT(*) AS n FROM bike_forecast;")[0]["n"])
+        logger.info(f"✅ Bike forecast updated: {written} rows (next_hours={forecast_hours}, step={forecast_step}min)")
+        
+        db_info = repo._fetchall("SELECT DATABASE() AS db, @@port AS port, @@hostname AS host;")[0]
+        logger.info(f"Database: {db_info}")
+        
+        count_info = repo._fetchall("SELECT COUNT(*) AS n FROM bike_forecast;")[0]
+        logger.info(f"Total bike_forecast rows: {count_info['n']}")
     finally:
         repo.close()
+        logger.info("Analytics repository closed")
+    
